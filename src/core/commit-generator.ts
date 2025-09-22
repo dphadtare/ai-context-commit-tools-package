@@ -315,14 +315,23 @@ REQUIREMENTS:
 - Suggested: ${suggestedType}${suggestedScope ? `(${suggestedScope})` : ''}
 - Under 72 characters
 - Imperative mood (add, fix, update)
+- Only when changes are big: Include 3-5 key bullet points in the commit body describing what was done
 ${userContext ? `- Context: ${userMessage}` : ''}
 ${ticketId ? `- Include: ${ticketId}` : ''}
 
 RESPOND WITH ONLY THE COMMIT MESSAGE IN THIS FORMAT:
-@@@type(scope): description@@@
+@@@type(scope): description
+    - Bullet point 1
+    - Bullet point 2
+    - Bullet point 3
+@@@
 
 Examples:
-@@@feat(auth): add JWT authentication@@@
+@@@feat(auth): add JWT authentication
+    - Bullet point 1
+    - Bullet point 2
+    - Bullet point 3
+@@@
 @@@fix(api): resolve timeout in user endpoint@@@
 @@@docs: update installation guide@@@`;
   }

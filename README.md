@@ -182,7 +182,7 @@ Generated changelogs follow [Keep a Changelog](https://keepachangelog.com/) form
 
 ### GitHub Actions
 
-Automatic daily changelog updates:
+The package installs an intelligent PR-based workflow that respects branch protection rules while avoiding duplicate PRs:
 
 ```yaml
 # .github/workflows/changelog.yml
@@ -195,11 +195,138 @@ on:
 jobs:
   changelog:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
     steps:
       - uses: actions/checkout@v4
+      - name: Check for existing changelog PR
+        run: # Smart logic to detect existing PRs
       - name: Generate changelog
-        run: npx ai-dev-tools changelog
+        run: npx ai-changelog
+      - name: Handle PR intelligently
+        run: # Create new or update existing PR
 ```
+
+### 🧠 **Smart PR Logic**
+
+The workflow handles different scenarios intelligently:
+
+#### **Scenario 1: Existing PR + No New Changes**
+- ✅ **Detects existing changelog PR**
+- ⏭️ **Skips workflow execution** 
+- 📝 **Logs**: "Existing PR found, no new changes to add"
+- 🎯 **Result**: No duplicate PRs created
+
+#### **Scenario 2: Existing PR + New Changes**
+- ✅ **Detects existing changelog PR**
+- 🔄 **Updates existing PR branch** with new commits
+- 📝 **Force-pushes** to existing branch
+- 📄 **Updates PR description** with new timestamp
+- 🎯 **Result**: Single PR with all latest changes
+
+#### **Scenario 3: No Existing PR + New Changes**
+- 🆕 **Creates new changelog PR**
+- 🚀 **Enables auto-merge** when checks pass
+- 🎯 **Result**: New PR ready for review/auto-merge
+
+### 📝 **Example Workflow Execution**
+
+Here's what you'll see in your GitHub Actions logs:
+
+```bash
+# Day 1: First run with changes
+🔍 Checking for existing changelog PRs...
+❌ No existing changelog PR found
+📋 Generating changelog...
+✅ Changes detected in CHANGELOG.md
+🆕 Creating new changelog PR...
+✅ Created new PR #42
+🚀 Auto-merge enabled for PR #42
+
+# Day 2: Run with existing PR but no new changes  
+🔍 Checking for existing changelog PRs...
+✅ Found existing changelog PR #42
+📋 Generating changelog...
+ℹ️ No new changes detected
+⏭️ Skipping workflow - existing PR will be merged when approved
+
+# Day 3: Run with existing PR and new changes
+🔍 Checking for existing changelog PRs...
+✅ Found existing changelog PR #42 on branch changelog-update-20240922
+📋 Generating changelog...
+✅ New changes detected in CHANGELOG.md
+🔄 Updating existing PR #42
+📝 Force-pushed to existing branch
+📄 Updated PR description with new timestamp
+✅ Updated existing PR #42
+```
+
+### 🔒 **Security & Branch Protection**
+
+This approach maintains security by:
+- ✅ **Respecting branch protection rules** (uses PRs)
+- ✅ **Requiring approvals** if configured
+- ✅ **Running status checks** before merge
+- ✅ **Maintaining audit trail** through PR history
+- ✅ **No bypass permissions needed**
+
+### ✅ **Benefits**
+
+- 🛡️ **Secure**: Works with any branch protection setup
+- 🧠 **Smart**: Avoids duplicate PRs automatically  
+- ⚡ **Efficient**: Updates existing PRs instead of creating new ones
+- 🔄 **Auto-merge**: Merges when all requirements are met
+- 📋 **Clean**: Single PR per changelog update cycle
+
+### 🚀 **Quick Start for Protected Repositories**
+
+Perfect for repositories like `entrata/homebody-admin` with branch protection rules:
+
+```bash
+# 1. Navigate to your repository
+cd homebody-admin
+
+# 2. Install the smart workflow  
+npx ai-dev-tools init --force
+
+# 3. Commit the workflow file
+git add .github/workflows/changelog.yml
+git commit -m "feat: add smart changelog workflow"
+git push
+
+# 4. Done! The workflow will:
+#    ✅ Respect your 2-approval requirement
+#    ✅ Never create duplicate PRs  
+#    ✅ Update existing PRs with new commits
+#    ✅ Auto-merge when all requirements are met
+```
+
+### 🔧 **How It Works in Your Environment**
+
+The workflow will:
+- **Create PRs** that require your configured approvals (e.g., 2 reviewers)
+- **Run all status checks** before allowing merge
+- **Never bypass** your branch protection rules
+- **Handle duplicate prevention** automatically
+- **Auto-merge** only when everything is approved
+
+### 🐛 **Troubleshooting**
+
+**Q: I see multiple changelog PRs being created**
+- **A**: This shouldn't happen with the smart workflow. Check that you're using the latest version of the package.
+
+**Q: The workflow isn't updating my existing PR**
+- **A**: Ensure the existing PR was created by `github-actions[bot]` with title containing "chore: update changelog"
+
+**Q: Auto-merge isn't working**
+- **A**: Verify that:
+  - All required status checks are passing
+  - All required approvals have been received
+  - Auto-merge is enabled on your repository settings
+
+**Q: I want to disable auto-merge**
+- **A**: Remove the `gh pr merge --auto` line from the workflow file manually
 
 ### Git Hooks
 
@@ -236,7 +363,30 @@ ai-dev-tools status                  # Check status
 ai-dev-tools config [options]        # Manage configuration
 ```
 
-### Options
+### Init Command Options
+
+```bash
+ai-dev-tools init [options]
+
+Options:
+  -t, --type <type>           Project type: nestjs, react, express, nodejs (default: auto)
+  -f, --force                 Force overwrite existing files
+  --no-hooks                  Skip git hooks installation
+  --no-workflow               Skip GitHub Actions workflow
+  -h, --help                  Display help for command
+```
+
+### Workflow Details
+
+The installed GitHub Actions workflow includes:
+
+- **🕐 Scheduled Execution**: Runs daily at 11:00 PM IST (5:30 PM UTC)
+- **🎛️ Manual Trigger**: Can be triggered manually via GitHub Actions UI
+- **🧠 Smart PR Management**: Automatically handles existing PRs intelligently
+- **🔄 Auto-Merge**: Enables auto-merge when all checks and approvals pass
+- **🛡️ Security Compliant**: Works with any branch protection configuration
+
+### Additional Options
 
 ```bash
 # Init command
