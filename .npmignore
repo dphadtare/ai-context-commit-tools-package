@@ -1,0 +1,36 @@
+# Source files
+src/
+tsconfig.json
+test-commit.js
+
+# Development files
+.DS_Store
+*.log
+.env*
+.vscode/
+.cursor/
+
+# Git
+.git/
+.gitignore
+
+# Documentation (included via files in package.json)
+docs/
+INSTALLATION.md
+PUBLISHING.md
+
+# Test files
+__tests__/
+*.test.js
+*.test.ts
+
+# Coverage
+coverage/
+
+# IDE
+.idea/
+*.swp
+*.swo
+
+# OS
+Thumbs.db

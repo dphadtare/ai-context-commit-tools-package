@@ -1,0 +1,23 @@
+# Build outputs
+lib/
+dist/
+build/
+
+# Dependencies
+node_modules/
+
+# Logs
+*.log
+
+# Source maps
+*.map
+
+# Package files
+package-lock.json
+yarn.lock
+
+# Generated files
+*.d.ts
+
+# Documentation that should preserve formatting
+CHANGELOG.md
