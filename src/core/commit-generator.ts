@@ -320,20 +320,20 @@ ${userContext ? `- Context: ${userMessage}` : ''}
 ${ticketId ? `- Include: ${ticketId}` : ''}
 
 RESPOND WITH ONLY THE COMMIT MESSAGE IN THIS FORMAT:
-@@@type(scope): description
+@@@type(scope): ticketId - description
     - Bullet point 1
     - Bullet point 2
     - Bullet point 3
 @@@
 
 Examples:
-@@@feat(auth): add JWT authentication
+@@@feat(auth): TASK-123 - add JWT authentication
     - Bullet point 1
     - Bullet point 2
     - Bullet point 3
 @@@
-@@@fix(api): resolve timeout in user endpoint@@@
-@@@docs: update installation guide@@@`;
+@@@fix(api): TASK-124 - resolve timeout in user endpoint@@@
+@@@docs: TASK-125 - update installation guide@@@`;
   }
 
   /**
