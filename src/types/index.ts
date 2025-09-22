@@ -77,6 +77,7 @@ export interface ChangelogSection {
 
 export interface AIGeneratorOptions {
   debugMode?: boolean;
+  silentMode?: boolean;
   timeout?: number;
   model?: string;
   cursorPath?: string;

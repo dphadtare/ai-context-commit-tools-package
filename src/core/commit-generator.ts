@@ -20,6 +20,7 @@ export class AICommitGenerator {
     this.projectRoot = projectRoot;
     this.options = {
       debugMode: false,
+      silentMode: false,
       timeout: 30000,
       model: 'sonnet-4',
       ...options,
@@ -493,6 +494,11 @@ Modified ${analysis.fileCount} file${analysis.fileCount > 1 ? 's' : ''}: ${analy
    * Logging utility
    */
   private log(message: string): void {
+    // Don't log anything in silent mode
+    if (this.options.silentMode) {
+      return;
+    }
+    // Only log in debug mode, or when not in test environment
     if (this.options.debugMode || process.env.NODE_ENV !== 'test') {
       console.log(message);
     }

@@ -18,6 +18,7 @@ export async function commitCommand(options: CommitOptions): Promise<void> {
 
       const generator = new AICommitGenerator(process.cwd(), {
         debugMode: false,
+        silentMode: true,
       });
 
       const message = await generator.generateCommitMessage(options.message, projectConfig);
