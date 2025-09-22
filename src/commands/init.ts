@@ -372,8 +372,23 @@ jobs:
           echo "🔍 Checking for existing changelog PRs..."
           
           # Look for open PRs with changelog in title created by github-actions bot
-          EXISTING_PR=\$(gh pr list --author "github-actions[bot]" --state open --search "chore: update changelog" --json number,headRefName --jq '.[0].number // empty')
-          EXISTING_BRANCH=\$(gh pr list --author "github-actions[bot]" --state open --search "chore: update changelog" --json number,headRefName --jq '.[0].headRefName // empty')
+          # Use basic gh pr list without advanced flags for maximum compatibility
+          EXISTING_PR_LIST=\$(gh pr list --state open --author "github-actions[bot]" 2>/dev/null || echo "")
+          
+          # Filter for changelog PRs manually
+          EXISTING_PR=""
+          EXISTING_BRANCH=""
+          
+          if [ -n "\$EXISTING_PR_LIST" ]; then
+            # Look for PRs with "chore: update changelog" in the title
+            CHANGELOG_PR_LINE=\$(echo "\$EXISTING_PR_LIST" | grep "chore: update changelog" | head -n1)
+            if [ -n "\$CHANGELOG_PR_LINE" ]; then
+              # Extract PR number (first field in tab-separated format)
+              EXISTING_PR=\$(echo "\$CHANGELOG_PR_LINE" | cut -f1)
+              # Try to get branch name, fallback to pattern if gh view fails
+              EXISTING_BRANCH=\$(gh pr view "\$EXISTING_PR" 2>/dev/null | grep "head:" | awk '{print \$2}' || echo "changelog-update-")
+            fi
+          fi
           
           if [ -n "\$EXISTING_PR" ]; then
             echo "Found existing changelog PR #\$EXISTING_PR on branch \$EXISTING_BRANCH"
@@ -466,7 +481,7 @@ jobs:
               git push origin "\$BRANCH_NAME"
               
               # Create pull request using GitHub CLI
-              PR_NUMBER=\$(gh pr create \\
+              gh pr create \\
                 --title "📋 chore: update changelog" \\
                 --body "## Automated Changelog Update
 
@@ -483,15 +498,25 @@ jobs:
               ---
               *This PR was automatically created by the changelog workflow.*" \\
                 --head "\$BRANCH_NAME" \\
-                --base main \\
-                --json number \\
-                --jq '.number')
+                --base main
               
-              echo "✅ Created new PR #\$PR_NUMBER"
+              echo "✅ Created new changelog PR"
               
-              # Enable auto-merge for the PR
-              gh pr merge "\$PR_NUMBER" --auto --squash --delete-branch
-              echo "🚀 Auto-merge enabled for PR #\$PR_NUMBER"
+              # Try to enable auto-merge for the just-created PR
+              echo "🔄 Attempting to enable auto-merge..."
+              sleep 3  # Give GitHub a moment to process the PR creation
+              
+              # Try multiple approaches for auto-merge
+              if gh pr merge "\$BRANCH_NAME" --auto --squash --delete-branch 2>/dev/null; then
+                echo "🚀 Auto-merge enabled successfully"
+              elif gh pr merge "\$BRANCH_NAME" --auto --merge --delete-branch 2>/dev/null; then
+                echo "🚀 Auto-merge enabled with merge strategy"
+              else
+                echo "⚠️ Auto-merge could not be enabled automatically"
+                echo "💡 The PR has been created and is ready for review"
+                echo "💡 Enable auto-merge manually via GitHub UI or run:"
+                echo "   gh pr merge \$BRANCH_NAME --auto --squash --delete-branch"
+              fi
             fi
           else
             if [ "\${{ steps.check_pr.outputs.has_existing_pr }}" = "true" ]; then

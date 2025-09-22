@@ -328,6 +328,12 @@ The workflow will:
 **Q: I want to disable auto-merge**
 - **A**: Remove the `gh pr merge --auto` line from the workflow file manually
 
+**Q: Auto-merge fails with "unknown flag: --json" error**
+- **A**: Your GitHub CLI version may be older. The workflow will still create PRs successfully, you can:
+  - Enable auto-merge manually in the GitHub UI
+  - Update GitHub CLI: `gh auth refresh && gh release download` 
+  - Or simply approve and merge PRs manually
+
 ### Git Hooks
 
 Automatic commit message generation via Husky:
