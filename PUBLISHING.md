@@ -207,7 +207,7 @@ ENTRYPOINT ["ai-context-commit-tools"]
 ```ruby
 class AiDevTools < Formula
   desc "AI-powered development tools"
-  homepage "https://github.com/homebody/ai-context-commit-tools"
+  homepage "https://github.com/dphadtare/ai-context-commit-tools-package"
   url "https://registry.npmjs.org/ai-context-commit-tools/-/ai-context-commit-tools-1.0.0.tgz"
 
   depends_on "node"

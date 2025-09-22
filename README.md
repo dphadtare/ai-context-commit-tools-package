@@ -361,7 +361,7 @@ We welcome contributions! Please see our contributing guidelines for details.
 ### Development
 
 ```bash
-git clone https://github.com/ai-context-commit-tools/core
+git clone https://github.com/dphadtare/ai-context-commit-tools-package
 cd core
 npm install
 npm run build
@@ -387,8 +387,8 @@ MIT License - see [LICENSE](LICENSE) file for details.
 
 ## 📞 Support
 
-- 🐛 Issues: [GitHub Issues](https://github.com/ai-context-commit-tools/core/issues)
-- 📖 Docs: [Documentation](https://github.com/ai-context-commit-tools/core#readme)
+- 🐛 Issues: [GitHub Issues](https://github.com/dphadtare/ai-context-commit-tools-package/issues)
+- 📖 Docs: [Documentation](https://github.com/dphadtare/ai-context-commit-tools-package#readme)
 
 ---
 

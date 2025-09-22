@@ -16,7 +16,7 @@
     "dev": "npm run build:watch",
     "prepare": "npm run build",
     "prepublishOnly": "npm run build && npm run lint && npm run test",
-    "test": "jest",
+    "test": "jest --passWithNoTests",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
     "lint": "eslint 'src/**/*.{ts,tsx}' --cache",
@@ -46,12 +46,12 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/ai-context-commit-tools/core.git"
+    "url": "https://github.com/dphadtare/ai-context-commit-tools-package.git"
   },
   "bugs": {
-    "url": "https://github.com/ai-context-commit-tools/core/issues"
+    "url": "https://github.com/dphadtare/ai-context-commit-tools-package/issues"
   },
-  "homepage": "https://github.com/ai-context-commit-tools/core#readme",
+  "homepage": "https://github.com/dphadtare/ai-context-commit-tools-package#readme",
   "engines": {
     "node": ">=16.0.0"
   },

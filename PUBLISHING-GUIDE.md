@@ -57,7 +57,7 @@ ai-context-commit-tools --help
 
 ### Create GitHub Repository (Optional)
 ```bash
-# Suggested repository: github.com/ai-context-commit-tools/core
+# Suggested repository: github.com/dphadtare/ai-context-commit-tools-package
 # Or use your personal GitHub account
 ```
 
