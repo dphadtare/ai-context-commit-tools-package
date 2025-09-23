@@ -1,6 +1,5 @@
 import chalk from 'chalk';
 import { AICommitGenerator } from '../core/commit-generator';
-import { ProjectDetector } from '../core/project-detector';
 
 interface CommitOptions {
   interactive?: boolean;
@@ -13,15 +12,12 @@ export async function commitCommand(options: CommitOptions): Promise<void> {
   try {
     // Silent mode for git hooks (like entrata implementation)
     if (options.silent) {
-      const detector = new ProjectDetector();
-      const projectConfig = await detector.gatherProjectConfig();
-
       const generator = new AICommitGenerator(process.cwd(), {
         debugMode: false,
         silentMode: true,
       });
 
-      const message = await generator.generateCommitMessage(options.message, projectConfig);
+      const message = await generator.generateCommitMessage(options.message);
 
       // Only output the message for git hook consumption
       console.log(message);
@@ -34,14 +30,11 @@ export async function commitCommand(options: CommitOptions): Promise<void> {
       console.log('Please stage your changes first with: git add <files>');
     }
 
-    const detector = new ProjectDetector();
-    const projectConfig = await detector.gatherProjectConfig();
-
     const generator = new AICommitGenerator(process.cwd(), {
       debugMode: options.debug,
     });
 
-    const message = await generator.generateCommitMessage(options.message, projectConfig);
+    const message = await generator.generateCommitMessage(options.message);
 
     console.log('\n📝 Generated commit message:');
     console.log('─'.repeat(50));

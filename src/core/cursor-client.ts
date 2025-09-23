@@ -15,13 +15,16 @@ export class CursorClient {
       debugMode: false,
       timeout: 30000,
       model: 'sonnet-4',
+      maxRetries: 2,
+      retryDelay: 2000,
+      retryMultiplier: 2,
       ...options,
     };
     this.cursorPath = this.findCursorPath();
   }
 
   /**
-   * Generate AI response using Cursor CLI
+   * Generate AI response using Cursor CLI with retry logic
    */
   async generateResponse(prompt: string): Promise<CursorResponse> {
     if (!this.cursorPath) {
@@ -31,31 +34,91 @@ export class CursorClient {
       };
     }
 
+    // Implement retry logic with exponential backoff
+    const maxRetries = this.options.maxRetries || 2;
+    let lastError: string = '';
+
+    for (let attempt = 1; attempt <= maxRetries + 1; attempt++) {
+      if (attempt > 1) {
+        const retryMessage = this.options.debugMode
+          ? `🔄 Retry attempt ${attempt - 1}/${maxRetries}`
+          : `🔄 Retrying AI generation (${attempt - 1}/${maxRetries})...`;
+        console.log(retryMessage);
+      }
+
+      const result = await this.attemptGeneration(prompt, attempt);
+
+      if (result.success) {
+        if (this.options.debugMode && attempt > 1) {
+          console.log(`✅ Success on attempt ${attempt}`);
+        }
+        return result;
+      }
+
+      lastError = result.error || 'Unknown error';
+
+      // Check if this is a retryable error
+      if (!this.isRetryableError(lastError) || attempt === maxRetries + 1) {
+        return result;
+      }
+
+      // Calculate delay with exponential backoff
+      const baseDelay = this.options.retryDelay || 2000;
+      const multiplier = this.options.retryMultiplier || 2;
+      const delay = Math.min(baseDelay * Math.pow(multiplier, attempt - 1), 10000);
+
+      if (this.options.debugMode) {
+        console.log(`⏳ Waiting ${delay}ms before retry...`);
+      }
+
+      await new Promise(resolve => setTimeout(resolve, delay));
+    }
+
+    return {
+      success: false,
+      error: lastError,
+    };
+  }
+
+  /**
+   * Attempt to generate response (single attempt)
+   */
+  private async attemptGeneration(prompt: string, attempt: number): Promise<CursorResponse> {
     return new Promise(resolve => {
       try {
         // Write prompt to temp file to avoid shell escaping issues
         const fs = require('fs');
-        const tempFile = '/tmp/cursor-prompt-ai.txt';
+        const tempFile = `/tmp/cursor-prompt-ai-${Date.now()}-${attempt}.txt`;
         fs.writeFileSync(tempFile, prompt, 'utf8');
+
+        // Use fallback models for retries
+        // const models = ['sonnet-4', 'gpt-4', 'claude-3-sonnet'];
+        const currentModel = 'sonnet-4';
 
         // Build command with proper path handling
         const command =
           this.cursorPath === 'cursor-agent'
-            ? `cursor-agent --print --model ${this.options.model} --output-format text < "${tempFile}"`
-            : `"${this.cursorPath}" --print --model ${this.options.model} --output-format text < "${tempFile}"`;
+            ? `cursor-agent --print --model ${currentModel} --output-format text < "${tempFile}"`
+            : `"${this.cursorPath}" --print --model ${currentModel} --output-format text < "${tempFile}"`;
 
         if (this.options.debugMode) {
           console.log('=== CURSOR COMMAND ===');
           console.log(command);
+          if (attempt > 1) {
+            console.log(`🔄 Trying model: ${currentModel} (attempt ${attempt})`);
+          }
           console.log('=== PROMPT ===');
           console.log(`${prompt.substring(0, 500)}...`);
           console.log('=== END DEBUG ===\n');
         }
 
+        // Use longer timeout for first attempt to account for service warmup
+        const timeout = attempt === 1 ? this.options.timeout! * 1.5 : this.options.timeout;
+
         exec(
           command,
           {
-            timeout: this.options.timeout,
+            timeout,
             shell: '/bin/bash',
             maxBuffer: 1024 * 1024,
           },
@@ -87,6 +150,7 @@ export class CursorClient {
 
             try {
               // Clean response and extract commit message
+              // eslint-disable-next-line no-control-regex
               const cleanResponse = stdout.replace(/\x1b\[[0-9;]*m/g, '').trim();
 
               if (!cleanResponse) {
@@ -119,6 +183,34 @@ export class CursorClient {
         });
       }
     });
+  }
+
+  /**
+   * Check if an error is retryable
+   */
+  public isRetryableError(errorMessage: string): boolean {
+    const retryablePatterns = [
+      'timeout',
+      'etimedout',
+      'econnreset',
+      'econnrefused',
+      'enotfound',
+      'network',
+      'connection',
+      'temporarily unavailable',
+      'service unavailable',
+      'internal server error',
+      'gateway timeout',
+      'bad gateway',
+      'command failed',
+      'cursor cli execution failed',
+      'execution error',
+      'spawn',
+      'no such file',
+    ];
+
+    const lowerErrorMessage = errorMessage.toLowerCase();
+    return retryablePatterns.some(pattern => lowerErrorMessage.includes(pattern));
   }
 
   /**
@@ -213,7 +305,7 @@ export class CursorClient {
     // Strategy 4: Look for lines that start with common commit patterns
     const commitPatterns = [
       /^(add|fix|update|implement|remove|refactor|improve):/i,
-      /^(feat|fix|docs|style|refactor|perf|test|chore|ci|build)[\s\(:]/i,
+      /^(feat|fix|docs|style|refactor|perf|test|chore|ci|build)[\s(:]/i,
     ];
 
     for (const pattern of commitPatterns) {

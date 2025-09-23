@@ -135,9 +135,6 @@ async function installComponents(
   // Create directories
   await createDirectories(projectRoot);
 
-  // Install core scripts
-  await installCoreScripts(projectRoot, projectConfig);
-
   // Install git hooks
   if (options.hooks !== false) {
     await installGitHooks(projectRoot);
@@ -147,9 +144,6 @@ async function installComponents(
   if (options.workflow !== false) {
     await installGitHubWorkflow(projectRoot, options);
   }
-
-  // Create project context
-  await createProjectContext(projectRoot, projectConfig);
 
   // Install documentation
   await installDocumentation(projectRoot);
@@ -177,63 +171,6 @@ async function createDirectories(projectRoot: string): Promise<void> {
   }
 
   spinner.succeed('Directories created');
-}
-
-/**
- * Install core scripts (using direct package commands - no wrapper files needed)
- */
-async function installCoreScripts(projectRoot: string, _projectConfig: any): Promise<void> {
-  const spinner = ora('Setting up AI development commands...').start();
-
-  // No need to create wrapper scripts - we'll use direct npx commands in package.json
-  // This eliminates ESLint issues with require() statements in generated files
-
-  // Create a simple README for the scripts directory explaining the approach
-  const readmeContent = `# AI Context Commit Tools
-
-This project uses ai-context-commit-tools for AI-powered development workflow.
-
-## Available Commands
-
-Instead of local script files, use these NPM commands:
-
-\`\`\`bash
-# AI Commit Generation
-npm run commit:ai           # Interactive mode
-npx ai-commit --interactive # Direct command
-npx ai-commit --silent      # For git hooks
-
-# Changelog Generation  
-npm run changelog:preview   # Preview changes
-npm run changelog:ci        # Generate changelog
-npx ai-changelog           # Direct command
-\`\`\`
-
-## Benefits
-
-- ✅ Builds rich AI context through intelligent commits
-- ✅ Always up-to-date (no copied files)
-- ✅ No ESLint issues with require() statements
-- ✅ Smaller project footprint
-- ✅ Enhanced AI-assisted development
-
-## Advanced Usage
-
-\`\`\`bash
-# With context
-npx ai-commit --message "fixing auth bug"
-
-# Debug mode
-npx ai-commit --debug
-
-# From specific commit
-npx ai-changelog --from HEAD~10
-\`\`\`
-`;
-
-  await fs.writeFile(path.join(projectRoot, 'scripts/README.md'), readmeContent);
-
-  spinner.succeed('AI development commands configured (no wrapper scripts needed)');
 }
 
 /**
@@ -533,92 +470,6 @@ jobs:
 }
 
 /**
- * Create project context
- */
-async function createProjectContext(projectRoot: string, projectConfig: any): Promise<void> {
-  const spinner = ora('Creating project context...').start();
-
-  const templatesDir = path.join(__dirname, '../../templates');
-  const contextPath = path.join(projectRoot, '.cursor/context.md');
-
-  // Check if context.md already exists
-  if (await fs.pathExists(contextPath)) {
-    spinner.succeed('Project context already exists');
-    return;
-  }
-
-  let contextContent: string;
-
-  try {
-    // Try to read the specific template for this project type
-    const templatePath = path.join(templatesDir, `context-${projectConfig.type}.md`);
-    contextContent = await fs.readFile(templatePath, 'utf8');
-
-    // Replace placeholders
-    contextContent = contextContent
-      .replace(/\{\{PROJECT_NAME\}\}/g, projectConfig.name)
-      .replace(/\{\{PROJECT_DESCRIPTION\}\}/g, projectConfig.description || '')
-      .replace(/\{\{TECH_STACK\}\}/g, projectConfig.techStack.join(', '));
-
-    spinner.succeed('Project context created');
-  } catch (error) {
-    // If template doesn't exist, create a generic context file
-    contextContent = createGenericContextTemplate(projectConfig);
-    spinner.succeed(
-      'Generic project context created (customize .cursor/context.md for better AI suggestions)'
-    );
-  }
-
-  await fs.writeFile(contextPath, contextContent);
-}
-
-/**
- * Create generic context template when specific template is not available
- */
-function createGenericContextTemplate(projectConfig: any): string {
-  return `# ${projectConfig.name} - Project Context
-
-## Architecture Overview
-
-This is a **${projectConfig.type.charAt(0).toUpperCase() + projectConfig.type.slice(1)} Application** with the following characteristics:
-
-### Technology Stack
-${projectConfig.techStack.length > 0 ? projectConfig.techStack.map((tech: string) => `- ${tech}`).join('\n') : '- Add your technology stack here'}
-
-### Project Details
-- **Name**: ${projectConfig.name}
-- **Description**: ${projectConfig.description || 'Add your project description here'}
-- **Type**: ${projectConfig.type.charAt(0).toUpperCase() + projectConfig.type.slice(1)} Application
-
-### Key Features
-- Add your key features here
-- Describe main functionality
-- List important components
-
-### Development Patterns
-- Add your coding patterns here
-- Describe architectural decisions
-- List important conventions
-
-### Project Structure
-\`\`\`
-Add your project structure here
-\`\`\`
-
-## Instructions for AI
-
-Please customize this file with:
-1. Detailed project description
-2. Key architectural decisions
-3. Important business logic
-4. Coding standards and patterns
-5. Common file locations and purposes
-
-This context helps the AI generate better commit messages and understand your codebase.
-`;
-}
-
-/**
  * Install documentation
  */
 async function installDocumentation(projectRoot: string): Promise<void> {
@@ -761,7 +612,7 @@ function showCompletionMessage(_projectConfig: any): void {
 
   console.log(chalk.yellow('💡 Next steps:'));
   console.log('  - Ensure Cursor CLI is installed for AI features');
-  console.log('  - Customize .cursor/context.md for your project');
+  console.log('  - AI will use live project analysis for context');
   console.log('  - Review and edit generated commit messages as needed');
   console.log('');
   console.log(chalk.cyan('🔗 Direct Package Command Approach:'));

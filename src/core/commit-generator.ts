@@ -1,12 +1,8 @@
 import { execSync } from 'child_process';
-import {
-  CommitAnalysis,
-  FileCategories,
-  CommitType,
-  ProjectConfig,
-  AIGeneratorOptions,
-} from '../types';
+import { CommitAnalysis, FileCategories, CommitType, AIGeneratorOptions } from '../types';
 import { CursorClient } from './cursor-client';
+import { ProjectDetector } from './project-detector';
+import * as path from 'path';
 
 /**
  * AI-powered commit message generator
@@ -15,6 +11,7 @@ export class AICommitGenerator {
   private projectRoot: string;
   private options: AIGeneratorOptions;
   private cursorClient: CursorClient;
+  private projectDetector: ProjectDetector;
 
   constructor(projectRoot: string = process.cwd(), options: AIGeneratorOptions = {}) {
     this.projectRoot = projectRoot;
@@ -23,18 +20,19 @@ export class AICommitGenerator {
       silentMode: false,
       timeout: 30000,
       model: 'sonnet-4',
+      maxRetries: 2,
+      retryDelay: 2000,
+      retryMultiplier: 2,
       ...options,
     };
     this.cursorClient = new CursorClient(this.options);
+    this.projectDetector = new ProjectDetector(this.projectRoot);
   }
 
   /**
    * Generate AI commit message for staged changes
    */
-  async generateCommitMessage(
-    userMessage?: string,
-    projectConfig?: ProjectConfig
-  ): Promise<string> {
+  async generateCommitMessage(userMessage?: string): Promise<string> {
     try {
       this.log('🔍 Analyzing staged changes...');
       const analysis = this.analyzeStagedChanges();
@@ -45,7 +43,7 @@ export class AICommitGenerator {
 
       try {
         this.log('🤖 Generating AI commit message...');
-        const prompt = this.generatePrompt(analysis, userMessage, projectConfig);
+        const prompt = await this.generatePrompt(analysis, userMessage);
         const response = await this.cursorClient.generateResponse(prompt);
 
         if (response.success && response.message) {
@@ -249,26 +247,62 @@ export class AICommitGenerator {
    * Determine suggested scope
    */
   private determineSuggestedScope(categories: FileCategories, files: string[]): string | undefined {
-    // Check for specific module patterns
-    const modulePatterns = [
-      { pattern: /auth|authentication/i, scope: 'auth' },
-      { pattern: /health/i, scope: 'health' },
-      { pattern: /insurance/i, scope: 'insurance' },
-      { pattern: /rewards/i, scope: 'rewards' },
-      { pattern: /rent-reporting/i, scope: 'rent-reporting' },
-      { pattern: /shared/i, scope: 'shared' },
-      { pattern: /middleware/i, scope: 'middleware' },
-      { pattern: /prisma|database|migration/i, scope: 'db' },
-      { pattern: /docker|helm|terraform/i, scope: 'infra' },
+    // Check for common technical patterns first
+    const technicalPatterns = [
       { pattern: /test|spec/i, scope: 'test' },
-      { pattern: /\.md$|readme/i, scope: 'docs' },
-      { pattern: /component/i, scope: 'ui' },
-      { pattern: /api|endpoint/i, scope: 'api' },
+      { pattern: /\.md$|readme|doc/i, scope: 'docs' },
+      { pattern: /prisma|database|migration|schema/i, scope: 'db' },
+      { pattern: /docker|helm|terraform|deploy/i, scope: 'infra' },
+      { pattern: /middleware|guard|interceptor/i, scope: 'middleware' },
+      { pattern: /auth|authentication|login|jwt/i, scope: 'auth' },
     ];
 
-    for (const { pattern, scope } of modulePatterns) {
+    // Check for architectural patterns based on file categories
+    if (categories.controllers.length > 0) return 'api';
+    if (categories.components.length > 0) return 'ui';
+    if (categories.services.length > 0) return 'core';
+    if (categories.modules.length > 0) return 'module';
+    if (categories.config.length > 0) return 'config';
+
+    // Check technical patterns
+    for (const { pattern, scope } of technicalPatterns) {
       if (files.some(file => pattern.test(file))) {
         return scope;
+      }
+    }
+
+    // Fallback to directory-based scope detection
+    const directoryScopes = this.extractScopeFromDirectory(files);
+    if (directoryScopes) return directoryScopes;
+
+    return undefined;
+  }
+
+  /**
+   * Extract scope from directory structure
+   */
+  private extractScopeFromDirectory(files: string[]): string | undefined {
+    const commonDirectories = [
+      'src/components',
+      'src/pages',
+      'src/hooks',
+      'src/services',
+      'src/api',
+      'src/core',
+      'src/utils',
+      'src/lib',
+      'src/features',
+      'src/modules',
+      'src/controllers',
+      'src/models',
+      'src/config',
+    ];
+
+    for (const file of files) {
+      for (const dir of commonDirectories) {
+        if (file.includes(dir)) {
+          return path.basename(dir);
+        }
       }
     }
 
@@ -276,22 +310,62 @@ export class AICommitGenerator {
   }
 
   /**
-   * Generate AI prompt (enhanced with entrata-inspired strategies)
+   * Generate live project context from current project analysis
    */
-  private generatePrompt(
-    analysis: CommitAnalysis,
-    userMessage?: string,
-    _projectConfig?: ProjectConfig
-  ): string {
+  private async generateLiveProjectContext(): Promise<string> {
+    try {
+      const projectConfig = await this.projectDetector.gatherProjectConfig();
+
+      // Generate rich context from live project data
+      const contextSections = [];
+
+      // Project overview
+      contextSections.push(`# ${projectConfig.name}\n`);
+
+      if (projectConfig.description) {
+        contextSections.push(`## Description\n${projectConfig.description}\n`);
+      }
+
+      // Project details
+      contextSections.push(`## Project Details
+- **Type**: ${projectConfig.type.charAt(0).toUpperCase() + projectConfig.type.slice(1)} Application
+- **Tech Stack**: ${projectConfig.techStack?.join(', ') || 'Not detected'}
+- **Dependencies**: ${projectConfig.dependencies?.slice(0, 8).join(', ') || 'None'}
+- **Project Structure**: ${projectConfig.projectStructure?.join(', ') || 'Auto-detected'}`);
+
+      // Architecture info if available
+      if (projectConfig.architecture) {
+        contextSections.push(`## Architecture\n${projectConfig.architecture.substring(0, 500)}...`);
+      }
+
+      // Existing context from files if available
+      if (projectConfig.context) {
+        contextSections.push(
+          `## Additional Context\n${projectConfig.context.substring(0, 500)}...`
+        );
+      }
+
+      return contextSections.join('\n\n');
+    } catch (error) {
+      this.log(`⚠️  Could not generate live project context: ${error}`);
+      return '';
+    }
+  }
+
+  /**
+   * Generate AI prompt (enhanced with project context)
+   */
+  private async generatePrompt(analysis: CommitAnalysis, userMessage?: string): Promise<string> {
     const { suggestedType, suggestedScope } = analysis;
 
     // Detect ticket ID from branch or user message
     const ticketId = this.detectTicketId(userMessage);
 
-    // Note: Project info could be added here for enhanced context if needed
+    // Generate live project context for enhanced AI understanding
+    const projectContext = await this.generateLiveProjectContext();
 
     const filesList = analysis.files
-      .slice(0, 5)
+      .slice(0, 100)
       .map(file => `- ${file}`)
       .join('\n');
 
@@ -301,39 +375,57 @@ export class AICommitGenerator {
     // User context handling
     const userContext = userMessage ? `User context: "${userMessage}"\n\n` : '';
 
-    return `You are a commit message generator. Generate ONLY a conventional commit message, nothing else.
+    // Build project context section
+    const contextSection = projectContext
+      ? `PROJECT CONTEXT:
+${projectContext.substring(0, 1500)}
+
+---
+
+`
+      : '';
+
+    return `You are a commit message generator for this project. Generate ONLY a conventional commit message, nothing else.
+
+${contextSection}
 
 CHANGES TO COMMIT:
 ${filesList}${analysis.files.length > 5 ? '\n- ...' : ''}
 
 DIFF SUMMARY:
-${diffContext.substring(0, 800)}
+${diffContext}
 
 REQUIREMENTS:
 - Format: type(scope): description
-- Types: feat, fix, docs, style, refactor, perf, test, chore, ci, build
-- Suggested: ${suggestedType}${suggestedScope ? `(${suggestedScope})` : ''}
+- Types: feat, fix, docs, style, refactor, perf, test, chore, ci, build, security
+- Use the PROJECT CONTEXT above to choose appropriate scopes based on the project structure and business domain
+- Suggested type: ${suggestedType}${suggestedScope ? `, suggested scope: ${suggestedScope}` : ''}
 - Under 72 characters
 - Imperative mood (add, fix, update)
-- Only when changes are big: Include 3-5 key bullet points in the commit body describing what was done
+- Only when changes are significant: Include 3-5 key bullet points in the commit body describing what was done
 ${userContext ? `- Context: ${userMessage}` : ''}
 ${ticketId ? `- Include: ${ticketId}` : ''}
 
-RESPOND WITH ONLY THE COMMIT MESSAGE IN THIS FORMAT:
+RESPOND WITH ONLY THE COMMIT MESSAGE BETWEEN @@@ DELIMITERS:
+The final commit message must start and end between "@@@". Everything outside these delimiters will be ignored.
+
+FORMAT:
 @@@type(scope): ticketId - description
-    - Bullet point 1
-    - Bullet point 2
-    - Bullet point 3
+- Bullet point 1 (only for significant changes)
+- Bullet point 2
+- Bullet point 3
 @@@
 
 Examples:
-@@@feat(auth): TASK-123 - add JWT authentication
-    - Bullet point 1
-    - Bullet point 2
-    - Bullet point 3
-@@@
-@@@fix(api): TASK-124 - resolve timeout in user endpoint@@@
-@@@docs: TASK-125 - update installation guide@@@`;
+  @@@feat(auth): TASK-123 - add JWT authentication
+      - Implement token-based authentication
+      - Add JWT middleware for protected routes
+      - Create user login and registration endpoints
+  @@@
+
+  @@@fix(api): TASK-124 - resolve timeout in user endpoint@@@
+
+  @@@docs: TASK-125 - update installation guide@@@`;
   }
 
   /**
@@ -374,12 +466,12 @@ Examples:
       // Get key changes (additions and deletions)
       const lines = diff.split('\n');
       const keyChanges = lines
-        .filter(line => line.startsWith('+') || line.startsWith('-'))
-        .filter(line => !line.startsWith('+++') && !line.startsWith('---'))
-        .slice(0, 20)
+        .filter(line => line.startsWith('+') || line.startsWith('+++') || line.startsWith('-'))
+        .filter(line => !line.startsWith('---'))
+        .slice(0, 200)
         .join('\n');
 
-      return `${diff.substring(0, 500)}\n\nKey Changes:\n${keyChanges}\n\n[...diff truncated...]`;
+      return `${diff.substring(0, 1000)}\n\nKey Changes:\n${keyChanges}\n\n[...diff truncated...]`;
     }
 
     return diff;
@@ -389,7 +481,16 @@ Examples:
    * Extract commit message from AI response
    */
   private extractCommitMessage(response: string): string {
-    // First, try to find a conventional commit format anywhere in the response
+    // First, try to extract content between @@@ delimiters
+    const delimiterMatch = response.match(/@@@\s*([\s\S]*?)\s*@@@/);
+    if (delimiterMatch && delimiterMatch[1]) {
+      const extractedContent = delimiterMatch[1].trim();
+      if (extractedContent) {
+        return extractedContent;
+      }
+    }
+
+    // Fallback: try to find a conventional commit format anywhere in the response
     const conventionalCommitRegex =
       /^(feat|fix|docs|style|refactor|perf|test|chore|ci|build|security)(\([^)]+\))?: .{1,72}$/gm;
     const matches = response.match(conventionalCommitRegex);

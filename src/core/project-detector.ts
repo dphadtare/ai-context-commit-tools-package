@@ -65,8 +65,6 @@ export class ProjectDetector {
       description: packageJson.description,
       techStack,
       architecture,
-      context: await this.getCursorContext(),
-      // Enhanced context like entrata
       dependencies: await this.getKeyDependencies(),
       scripts: await this.getKeyScripts(),
       projectStructure: await this.getProjectStructure(),
@@ -176,20 +174,6 @@ export class ProjectDetector {
         const content = await fs.readFile(filePath, 'utf8');
         return content.substring(0, 1000); // Limit size
       }
-    }
-
-    return undefined;
-  }
-
-  /**
-   * Read Cursor context if available
-   */
-  private async getCursorContext(): Promise<string | undefined> {
-    const contextPath = path.join(this.projectRoot, '.cursor', 'context.md');
-
-    if (await fs.pathExists(contextPath)) {
-      const content = await fs.readFile(contextPath, 'utf8');
-      return content.substring(0, 1000); // Limit size
     }
 
     return undefined;

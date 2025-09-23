@@ -81,6 +81,9 @@ export interface AIGeneratorOptions {
   timeout?: number;
   model?: string;
   cursorPath?: string;
+  maxRetries?: number;
+  retryDelay?: number;
+  retryMultiplier?: number;
 }
 
 export interface InitOptions {
