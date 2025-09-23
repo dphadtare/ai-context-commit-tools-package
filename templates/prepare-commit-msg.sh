@@ -7,6 +7,12 @@
 COMMIT_MSG_FILE=$1
 COMMIT_SOURCE=$2
 
+# Skip hook in CI environments to prevent conflicts with automated workflows
+if [ -n "$CI" ] || [ -n "$GITHUB_ACTIONS" ] || [ -n "$GITLAB_CI" ] || [ -n "$JENKINS_URL" ] || [ -n "$CIRCLECI" ]; then
+    echo "⏭️ Skipping AI generation in CI environment"
+    exit 0
+fi
+
 # Skip hook for merges, amends, and commits that already have messages
 if [ -z "$COMMIT_SOURCE" ] || [ "$COMMIT_SOURCE" = "message" ] || [ "$COMMIT_SOURCE" = "template" ]; then
 
