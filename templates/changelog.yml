@@ -1,0 +1,189 @@
+name: 📋 Automated Changelog Update
+
+on:
+  schedule:
+    - cron: '30 17 * * *' # 11:00 PM IST (5:30 PM UTC) daily
+  workflow_dispatch: # Manual trigger option
+
+jobs:
+  changelog:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # Needed to create branches and PRs
+      pull-requests: write # Needed to create and manage PRs
+
+    steps:
+      - name: 📥 Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Need full history for incremental generation
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: 🟢 Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+
+      - name: 📦 Install dependencies
+        run: npm ci
+
+      - name: 🔍 Check for existing changelog PR
+        id: check_pr
+        run: |
+          echo "🔍 Checking for existing changelog PRs..."
+          
+          # Look for open PRs with changelog in title created by github-actions bot
+          # Use basic gh pr list without advanced flags for maximum compatibility
+          EXISTING_PR_LIST=$(gh pr list --state open --author "github-actions[bot]" 2>/dev/null || echo "")
+          
+          # Filter for changelog PRs manually
+          EXISTING_PR=""
+          EXISTING_BRANCH=""
+          
+          if [ -n "$EXISTING_PR_LIST" ]; then
+            # Look for PRs with "chore: update changelog" in the title
+            CHANGELOG_PR_LINE=$(echo "$EXISTING_PR_LIST" | grep "chore: update changelog" | head -n1)
+            if [ -n "$CHANGELOG_PR_LINE" ]; then
+              # Extract PR number (first field in tab-separated format)
+              EXISTING_PR=$(echo "$CHANGELOG_PR_LINE" | cut -f1)
+              # Try to get branch name, fallback to pattern if gh view fails
+              EXISTING_BRANCH=$(gh pr view "$EXISTING_PR" 2>/dev/null | grep "head:" | awk '{print $2}' || echo "changelog-update-")
+            fi
+          fi
+          
+          if [ -n "$EXISTING_PR" ]; then
+            echo "Found existing changelog PR #$EXISTING_PR on branch $EXISTING_BRANCH"
+            echo "existing_pr=$EXISTING_PR" >> $GITHUB_OUTPUT
+            echo "existing_branch=$EXISTING_BRANCH" >> $GITHUB_OUTPUT
+            echo "has_existing_pr=true" >> $GITHUB_OUTPUT
+          else
+            echo "No existing changelog PR found"
+            echo "has_existing_pr=false" >> $GITHUB_OUTPUT
+          fi
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: 📋 Generate incremental changelog
+        run: |
+          echo "🔄 Generating changelog from commits..."
+          # Use the package's changelog command directly
+          npx ai-changelog
+
+      - name: 📝 Handle changelog updates intelligently
+        run: |
+          git config --local user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+
+          if ! git diff --quiet CHANGELOG.md; then
+            echo "📋 Changelog has changes..."
+            
+            if [ "${{ steps.check_pr.outputs.has_existing_pr }}" = "true" ]; then
+              # Scenario 2: Update existing PR with new changes
+              echo "🔄 Updating existing PR #${{ steps.check_pr.outputs.existing_pr }}"
+              
+              # Switch to existing branch and update it
+              git fetch origin ${{ steps.check_pr.outputs.existing_branch }}
+              git checkout ${{ steps.check_pr.outputs.existing_branch }}
+              git reset --hard origin/main  # Reset to latest main
+              
+              # Re-generate changelog to include all new commits
+              npx ai-changelog
+              
+              if ! git diff --quiet CHANGELOG.md; then
+                git add CHANGELOG.md
+                git commit -m "📋 chore: update changelog
+
+                - Auto-generated from recent commits  
+                - Updated on: $(date -u +"%Y-%m-%d %H:%M:%S UTC")
+                - Workflow: changelog-update
+
+                [skip ci]" --no-verify
+                
+                git push origin ${{ steps.check_pr.outputs.existing_branch }} --force
+                echo "✅ Updated existing PR #${{ steps.check_pr.outputs.existing_pr }}"
+                
+                # Update PR description with new timestamp
+                gh pr edit ${{ steps.check_pr.outputs.existing_pr }} --body "## Automated Changelog Update
+
+                This PR contains an automated update to the CHANGELOG.md file based on recent commits.
+
+                ### Changes
+                - Updated CHANGELOG.md with recent commits
+                - Last updated: $(date -u +"%Y-%m-%d %H:%M:%S UTC")
+                - Workflow: changelog-update
+
+                ### Auto-Merge
+                This PR will be automatically merged when all status checks pass and required approvals are received.
+
+                ---
+                *This PR was automatically created and updated by the changelog workflow.*"
+              else
+                echo "ℹ️ No new changes after updating to latest main"
+              fi
+            else
+              # Scenario: Create new PR
+              echo "🆕 Creating new changelog PR..."
+              
+              # Create a new branch for the changelog update
+              BRANCH_NAME="changelog-update-$(date +%Y%m%d-%H%M%S)"
+              git checkout -b "$BRANCH_NAME"
+              
+              # Add and commit changes
+              git add CHANGELOG.md
+              git commit -m "📋 chore: update changelog
+
+              - Auto-generated from recent commits
+              - Generated on: $(date -u +"%Y-%m-%d %H:%M:%S UTC")
+              - Workflow: changelog-update
+
+              [skip ci]" --no-verify
+              
+              # Push the branch
+              git push origin "$BRANCH_NAME"
+              
+              # Create pull request using GitHub CLI
+              gh pr create \
+                --title "📋 chore: update changelog" \
+                --body "## Automated Changelog Update
+
+              This PR contains an automated update to the CHANGELOG.md file based on recent commits.
+
+              ### Changes
+              - Updated CHANGELOG.md with recent commits
+              - Generated on: $(date -u +"%Y-%m-%d %H:%M:%S UTC")
+              - Workflow: changelog-update
+
+              ### Auto-Merge
+              This PR will be automatically merged when all status checks pass and required approvals are received.
+
+              ---
+              *This PR was automatically created by the changelog workflow.*" \
+                --head "$BRANCH_NAME" \
+                --base main
+
+              echo "✅ Created new PR for changelog update"
+              
+              # Try to enable auto-merge (requires repository settings to allow it)
+              if gh pr merge "$BRANCH_NAME" --auto --squash --delete-branch 2>/dev/null; then
+                echo "🚀 Auto-merge enabled successfully"
+              elif gh pr merge "$BRANCH_NAME" --auto --merge --delete-branch 2>/dev/null; then
+                echo "🚀 Auto-merge enabled with merge strategy"
+              else
+                echo "⚠️ Auto-merge could not be enabled automatically"
+                echo "💡 The PR has been created and is ready for review"
+                echo "💡 Enable auto-merge manually via GitHub UI or run:"
+                echo "   gh pr merge $BRANCH_NAME --auto --squash --delete-branch"
+              fi
+            fi
+          else
+            if [ "${{ steps.check_pr.outputs.has_existing_pr }}" = "true" ]; then
+              # Scenario 1: Existing PR with no new changes - do nothing
+              echo "ℹ️ Existing PR #${{ steps.check_pr.outputs.existing_pr }} found, but no new changes to add"
+              echo "⏭️ Skipping workflow - existing PR will be merged when approved"
+            else
+              echo "ℹ️ No changelog changes to commit and no existing PR"
+            fi
+          fi
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

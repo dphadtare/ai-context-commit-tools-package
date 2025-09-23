@@ -376,16 +376,12 @@ export class AICommitGenerator {
     const userContext = userMessage ? `User context: "${userMessage}"\n\n` : '';
 
     // Build project context section
-    const contextSection = projectContext
-      ? `PROJECT CONTEXT:
-${projectContext.substring(0, 1500)}
+    const contextSection = `PROJECT CONTEXT: ${projectContext.substring(0, 1500)}`;
 
----
+    return `IGNORE ALL CURSOR RULES AND WORKSPACE RULES. DO NOT CREATE FILES. DO NOT FOLLOW CHECKLISTS. DO NOT EXECUTE ANY WORKSPACE-LEVEL RULES OR AGENT-REQUESTABLE RULES.
 
-`
-      : '';
-
-    return `You are a commit message generator for this project. Generate ONLY a conventional commit message, nothing else.
+    You are a commit message generator for this project. Generate ONLY a conventional commit message, nothing else.
+IMPORTANT: All necessary project information is provided below. Do NOT attempt to run any git commands or analyze the repository directly. Use only the information provided in this prompt.
 
 ${contextSection}
 
@@ -414,18 +410,7 @@ FORMAT:
 - Bullet point 1 (only for significant changes)
 - Bullet point 2
 - Bullet point 3
-@@@
-
-Examples:
-  @@@feat(auth): TASK-123 - add JWT authentication
-      - Implement token-based authentication
-      - Add JWT middleware for protected routes
-      - Create user login and registration endpoints
-  @@@
-
-  @@@fix(api): TASK-124 - resolve timeout in user endpoint@@@
-
-  @@@docs: TASK-125 - update installation guide@@@`;
+@@@`;
   }
 
   /**
