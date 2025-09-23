@@ -90,35 +90,27 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: 📋 Generate incremental changelog
-        run: |
-          echo "🔄 Generating changelog from commits..."
-          # Use the package's changelog command directly
-          npx ai-changelog
-
       - name: 📝 Handle changelog updates intelligently
         run: |
           git config --local user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
 
-          if ! git diff --quiet CHANGELOG.md; then
-            echo "📋 Changelog has changes..."
+          if [ "${{ steps.check_pr.outputs.has_existing_pr }}" = "true" ]; then
+            # Scenario 1: Update existing PR with new changes
+            echo "🔄 Updating existing PR #${{ steps.check_pr.outputs.existing_pr }}"
             
-            if [ "${{ steps.check_pr.outputs.has_existing_pr }}" = "true" ]; then
-              # Scenario 2: Update existing PR with new changes
-              echo "🔄 Updating existing PR #${{ steps.check_pr.outputs.existing_pr }}"
+            # Switch to existing branch and update it
+            git fetch origin ${{ steps.check_pr.outputs.existing_branch }}
+            git checkout ${{ steps.check_pr.outputs.existing_branch }}
+            git reset --hard origin/main  # Reset to latest main
+            
+            # Generate changelog on the correct branch
+            echo "🔄 Generating changelog from commits..."
+            npx ai-changelog
               
-              # Switch to existing branch and update it
-              git fetch origin ${{ steps.check_pr.outputs.existing_branch }}
-              git checkout ${{ steps.check_pr.outputs.existing_branch }}
-              git reset --hard origin/main  # Reset to latest main
-              
-              # Re-generate changelog to include all new commits
-              npx ai-changelog
-              
-              if ! git diff --quiet CHANGELOG.md; then
-                git add CHANGELOG.md
-                git commit -m "📋 chore: update changelog
+            if ! git diff --quiet CHANGELOG.md; then
+              git add CHANGELOG.md
+              git commit -m "📋 chore: update changelog
 
                 - Auto-generated from recent commits  
                 - Updated on: $(date -u +"%Y-%m-%d %H:%M:%S UTC")
@@ -144,17 +136,22 @@ jobs:
 
                 ---
                 *This PR was automatically created and updated by the changelog workflow.*"
-              else
-                echo "ℹ️ No new changes after updating to latest main"
-              fi
             else
-              # Scenario: Create new PR
-              echo "🆕 Creating new changelog PR..."
-              
-              # Create a new branch for the changelog update
-              BRANCH_NAME="changelog-update-$(date +%Y%m%d-%H%M%S)"
-              git checkout -b "$BRANCH_NAME"
-              
+              echo "ℹ️ No new changes after updating to latest main"
+            fi
+          else
+            # Scenario 2: Create new PR
+            echo "🆕 Creating new changelog PR..."
+            
+            # Create a new branch for the changelog update
+            BRANCH_NAME="changelog-update-$(date +%Y%m%d-%H%M%S)"
+            git checkout -b "$BRANCH_NAME"
+            
+            # Generate changelog on the new branch
+            echo "🔄 Generating changelog from commits..."
+            npx ai-changelog
+            
+            if ! git diff --quiet CHANGELOG.md; then
               # Add and commit changes
               git add CHANGELOG.md
               git commit -m "📋 chore: update changelog
@@ -201,14 +198,8 @@ jobs:
                 echo "💡 Enable auto-merge manually via GitHub UI or run:"
                 echo "   gh pr merge $BRANCH_NAME --auto --squash --delete-branch"
               fi
-            fi
-          else
-            if [ "${{ steps.check_pr.outputs.has_existing_pr }}" = "true" ]; then
-              # Scenario 1: Existing PR with no new changes - do nothing
-              echo "ℹ️ Existing PR #${{ steps.check_pr.outputs.existing_pr }} found, but no new changes to add"
-              echo "⏭️ Skipping workflow - existing PR will be merged when approved"
             else
-              echo "ℹ️ No changelog changes to commit and no existing PR"
+              echo "ℹ️ No changelog changes to commit"
             fi
           fi
         env:
