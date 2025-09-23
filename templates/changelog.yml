@@ -47,8 +47,34 @@ jobs:
             if [ -n "$CHANGELOG_PR_LINE" ]; then
               # Extract PR number (first field in tab-separated format)
               EXISTING_PR=$(echo "$CHANGELOG_PR_LINE" | cut -f1)
-              # Try to get branch name, fallback to pattern if gh view fails
-              EXISTING_BRANCH=$(gh pr view "$EXISTING_PR" 2>/dev/null | grep "head:" | awk '{print $2}' || echo "changelog-update-")
+              # Try multiple methods to get branch name with robust fallbacks
+              EXISTING_BRANCH=""
+              
+              # Method 1: Use gh pr view with --json to get reliable output
+              if [ -z "$EXISTING_BRANCH" ]; then
+                EXISTING_BRANCH=$(gh pr view "$EXISTING_PR" --json headRefName -q '.headRefName' 2>/dev/null || echo "")
+              fi
+              
+              # Method 2: Try the original grep method as fallback
+              if [ -z "$EXISTING_BRANCH" ]; then
+                EXISTING_BRANCH=$(gh pr view "$EXISTING_PR" 2>/dev/null | grep -E "^\s*(head|Head|HEAD):" | awk '{print $2}' || echo "")
+              fi
+              
+              # Method 3: Parse from the PR list output (branch is usually the last field)
+              if [ -z "$EXISTING_BRANCH" ]; then
+                # Try to extract the last field which is typically the branch name
+                EXISTING_BRANCH=$(echo "$CHANGELOG_PR_LINE" | awk '{print $NF}' | tr -d '\t' | xargs)
+                
+                # Validate that it looks like a branch name (not a status or username)
+                if [[ "$EXISTING_BRANCH" == "OPEN" ]] || [[ "$EXISTING_BRANCH" == "CLOSED" ]] || [[ "$EXISTING_BRANCH" == *"[bot]"* ]]; then
+                  EXISTING_BRANCH=""
+                fi
+              fi
+              
+              # Final fallback: generate a pattern-based name
+              if [ -z "$EXISTING_BRANCH" ]; then
+                EXISTING_BRANCH="changelog-update-$(date +%Y%m%d)"
+              fi
             fi
           fi
           
