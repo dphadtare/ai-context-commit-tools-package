@@ -139,7 +139,7 @@ export class ChangelogGenerator {
    * Parse commits into changelog entries
    */
   private parseCommits(commits: GitCommit[]): ChangelogEntry[] {
-    return commits.map(commit => {
+    const entries = commits.map(commit => {
       const parsed = this.parseConventionalCommit(commit.message);
       return {
         type: parsed.type,
@@ -150,6 +150,12 @@ export class ChangelogGenerator {
         date: commit.date,
       };
     });
+
+    // Only filter out obvious noise, keep most content
+    const filtered = entries.filter(entry => this.isChangelogWorthy(entry));
+
+    // Deduplicate similar entries
+    return this.deduplicateEntries(filtered);
   }
 
   /**
@@ -216,6 +222,72 @@ export class ChangelogGenerator {
   }
 
   /**
+   * Check if a commit entry is worthy of being in the changelog
+   * Uses a positive approach: what makes a good changelog entry?
+   */
+  private isChangelogWorthy(entry: ChangelogEntry): boolean {
+    const description = entry.description.toLowerCase().trim();
+
+    // Only exclude the most obvious noise - be extremely permissive
+    // NEVER filter task IDs - they're important for traceability
+    const excludePatterns = [
+      /^merge /,
+      /found \d+ staged files/,
+      /generating ai commit message/,
+      /ai message generated/,
+      /^wip$/,
+      /^temp$/,
+      /^tmp$/,
+      /^\w+\.\w+$/, // Files with extensions like "file.js", "test.py", etc.
+      /^(update|fix|add|remove|change|delete|create|test|debug)$/, // Only specific meaningless single words
+    ];
+
+    for (const pattern of excludePatterns) {
+      if (pattern.test(description)) {
+        return false;
+      }
+    }
+
+    // Include everything else - let users curate manually if needed
+    return true;
+  }
+
+  /**
+   * Deduplicate similar entries to prevent repetitive changelog content
+   */
+  private deduplicateEntries(entries: ChangelogEntry[]): ChangelogEntry[] {
+    const seen = new Map<string, ChangelogEntry>();
+
+    for (const entry of entries) {
+      // Create a normalized key for comparison
+      const normalizedDesc = this.normalizeDescription(entry.description);
+      const key = `${entry.type}:${entry.scope || ''}:${normalizedDesc}`;
+
+      if (!seen.has(key)) {
+        seen.set(key, entry);
+      } else {
+        // If we've seen this before, check if the new entry has more detail
+        const existing = seen.get(key)!;
+        if (entry.description.length > existing.description.length) {
+          seen.set(key, entry);
+        }
+      }
+    }
+
+    return Array.from(seen.values());
+  }
+
+  /**
+   * Normalize description for deduplication comparison
+   */
+  private normalizeDescription(description: string): string {
+    return description
+      .toLowerCase()
+      .replace(/\s+/g, ' ') // Normalize whitespace only
+      .trim();
+  }
+
+  /**
    * Group entries by commit type
    */
   private groupEntriesByType(entries: ChangelogEntry[]): ChangelogSection[] {
@@ -245,22 +317,57 @@ export class ChangelogGenerator {
   private generateSectionContent(sections: ChangelogSection[]): string {
     return sections
       .map(section => {
-        const entries = section.entries.map(entry => {
-          const scopeDisplay = entry.scope ? `**${entry.scope}**` : '';
-          const prefix = scopeDisplay ? `${scopeDisplay}: ` : '';
+        const entries = section.entries
+          .map(entry => {
+            const scopeDisplay = entry.scope ? `**${entry.scope}**` : '';
+            const prefix = scopeDisplay ? `${scopeDisplay}: ` : '';
 
-          // Clean up description
-          let description = entry.description;
-          description = description.replace(/^(add|fix|update|remove|implement|create)\s+/i, '');
-          if (description.length > 0 && !/^[A-Z]{2,}/.test(description)) {
-            description = description.charAt(0).toLowerCase() + description.slice(1);
-          }
+            // Clean up description
+            let description = entry.description;
 
-          return `- ${prefix}${description}`;
-        });
+            // Light cleanup - only remove truly redundant prefixes
+            description = description.replace(/^(add|fix|update|remove)\s+/i, '');
+
+            // Remove file extensions only if they're standalone (not part of meaningful context)
+            description = description.replace(
+              /\b[\w-]+\.(ts|js|tsx|jsx|json|yaml|yml|md|txt)\b(?!\s+\w)/gi,
+              ''
+            );
+
+            // Keep task IDs in the final output - only clean up in deduplication
+            // Users want to see task IDs for traceability
+
+            // Clean up extra whitespace and punctuation
+            description = description.replace(/\s+/g, ' ').trim();
+            description = description.replace(/^[,\-\s]+|[,\-\s]+$/g, '');
+
+            // Ensure proper capitalization for user-facing content
+            if (description.length > 0 && !/^[A-Z]{2,}/.test(description)) {
+              description = description.charAt(0).toLowerCase() + description.slice(1);
+            }
+
+            // Final validation - if description is too short after cleaning, skip it
+            if (description.length < 10) {
+              return null;
+            }
+
+            // Use different formatting for scoped vs unscoped entries
+            if (entry.scope) {
+              return `${prefix}${description}`;
+            } else {
+              return `- ${description}`;
+            }
+          })
+          .filter(entry => entry !== null); // Remove null entries
+
+        // Only return sections that have entries after filtering
+        if (entries.length === 0) {
+          return null;
+        }
 
         return `### ${section.title}\n\n${entries.join('\n')}`;
       })
+      .filter(section => section !== null) // Remove empty sections
       .join('\n\n');
   }
 
@@ -325,9 +432,103 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
    * Intelligently merge existing and new sections
    */
   private intelligentMerge(existingSection: string, newSection: string): string {
-    // For now, simply append new content to existing
-    // In the future, this could be more sophisticated
-    return `${existingSection}\n\n${newSection}`;
+    // Parse existing content into entries
+    const existingEntries = this.parseExistingChangelogEntries(existingSection);
+    const newEntries = this.parseExistingChangelogEntries(newSection);
+
+    // Combine and deduplicate
+    const allEntries = [...existingEntries, ...newEntries];
+    const deduplicatedEntries = this.deduplicateChangelogEntries(allEntries);
+
+    // Group by section
+    const grouped: Record<string, string[]> = {};
+
+    deduplicatedEntries.forEach(entry => {
+      if (!grouped[entry.section]) {
+        grouped[entry.section] = [];
+      }
+      grouped[entry.section]!.push(entry.content);
+    });
+
+    // Rebuild sections in proper order
+    const sectionOrder = Object.values(this.typeTitles);
+    const sections = sectionOrder
+      .filter(section => grouped[section] && grouped[section].length > 0)
+      .map(section => `### ${section}\n\n${grouped[section]!.join('\n')}`)
+      .join('\n\n');
+
+    return sections;
+  }
+
+  /**
+   * Parse existing changelog entries from content
+   */
+  private parseExistingChangelogEntries(
+    content: string
+  ): Array<{ section: string; content: string }> {
+    const entries: Array<{ section: string; content: string }> = [];
+    const sections = content.split(/###\s+(.+)/);
+
+    for (let i = 1; i < sections.length; i += 2) {
+      const sectionTitle = sections[i]?.trim();
+      if (!sectionTitle) continue;
+      const sectionContent = sections[i + 1] || '';
+
+      const entryLines = sectionContent
+        .split('\n')
+        .filter(line => line.trim().startsWith('-'))
+        .map(line => line.trim());
+
+      entryLines.forEach(line => {
+        entries.push({
+          section: sectionTitle,
+          content: line,
+        });
+      });
+    }
+
+    return entries;
+  }
+
+  /**
+   * Deduplicate changelog entries by content similarity
+   */
+  private deduplicateChangelogEntries(
+    entries: Array<{ section: string; content: string }>
+  ): Array<{ section: string; content: string }> {
+    const seen = new Map<string, { section: string; content: string }>();
+
+    for (const entry of entries) {
+      // Normalize content for comparison
+      const normalized = this.normalizeChangelogEntry(entry.content);
+      const key = `${entry.section}:${normalized}`;
+
+      if (!seen.has(key)) {
+        seen.set(key, entry);
+      } else {
+        // Keep the longer/more detailed entry
+        const existing = seen.get(key)!;
+        if (entry.content.length > existing.content.length) {
+          seen.set(key, entry);
+        }
+      }
+    }
+
+    return Array.from(seen.values());
+  }
+
+  /**
+   * Normalize changelog entry for deduplication
+   */
+  private normalizeChangelogEntry(content: string): string {
+    return content
+      .toLowerCase()
+      .replace(/^-\s*/, '') // Remove bullet point
+      .replace(/\*\*[^*]+\*\*:\s*/, '') // Remove scope markers
+      .replace(/task\s*(id|Id)?\s*:\s*/, '') // Remove "task ID:" prefixes
+      .replace(/dev-\d+[,\s]*/, '') // Remove DEV-xxx task numbers
+      .replace(/\s+/g, ' ') // Normalize whitespace
+      .trim();
   }
 
   /**
@@ -338,14 +539,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     const metadata = `<!-- Generated: ${timestamp} Commit: ${latestCommit} -->
 <!-- CI-LAST-PROCESSED: ${latestCommit} -->`;
 
+    // First, remove any existing metadata blocks
+    const cleanedContent = this.removeExistingMetadata(content);
+
     const unreleasedEndRegex = /(## \[Unreleased\][\s\S]*?)(\n## |$)/;
-    const match = content.match(unreleasedEndRegex);
+    const match = cleanedContent.match(unreleasedEndRegex);
 
     if (match) {
-      return content.replace(unreleasedEndRegex, `${match[1]}\n${metadata}\n${match[2] || ''}`);
+      return cleanedContent.replace(
+        unreleasedEndRegex,
+        `${match[1]}\n${metadata}\n${match[2] || ''}`
+      );
     } else {
-      return `${content}\n${metadata}\n`;
+      return `${cleanedContent}\n${metadata}\n`;
     }
+  }
+
+  /**
+   * Remove existing metadata blocks from changelog content
+   */
+  private removeExistingMetadata(content: string): string {
+    // Remove all existing Generated and CI-LAST-PROCESSED comments
+    return (
+      content
+        .replace(/<!-- Generated:.*?-->\n?/g, '')
+        .replace(/<!-- CI-LAST-PROCESSED:.*?-->\n?/g, '')
+        // Clean up any extra blank lines that might result
+        .replace(/\n{3,}/g, '\n\n')
+        .trim()
+    );
   }
 
   /**

@@ -373,7 +373,7 @@ jobs:
                 - Updated on: \$(date -u +"%Y-%m-%d %H:%M:%S UTC")
                 - Workflow: changelog-update
 
-                [skip ci]"
+                [skip ci]" --no-verify
                 
                 git push origin \${{ steps.check_pr.outputs.existing_branch }} --force
                 echo "✅ Updated existing PR #\${{ steps.check_pr.outputs.existing_pr }}"
@@ -412,7 +412,7 @@ jobs:
               - Generated on: \$(date -u +"%Y-%m-%d %H:%M:%S UTC")
               - Workflow: changelog-update
 
-              [skip ci]"
+              [skip ci]" --no-verify
               
               # Push the branch
               git push origin "\$BRANCH_NAME"
