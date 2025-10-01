@@ -43,14 +43,14 @@ export class CursorClient {
         const retryMessage = this.options.debugMode
           ? `🔄 Retry attempt ${attempt - 1}/${maxRetries}`
           : `🔄 Retrying AI generation (${attempt - 1}/${maxRetries})...`;
-        console.log(retryMessage);
+        this.log(retryMessage);
       }
 
       const result = await this.attemptGeneration(prompt, attempt);
 
       if (result.success) {
         if (this.options.debugMode && attempt > 1) {
-          console.log(`✅ Success on attempt ${attempt}`);
+          this.log(`✅ Success on attempt ${attempt}`);
         }
         return result;
       }
@@ -68,7 +68,7 @@ export class CursorClient {
       const delay = Math.min(baseDelay * Math.pow(multiplier, attempt - 1), 10000);
 
       if (this.options.debugMode) {
-        console.log(`⏳ Waiting ${delay}ms before retry...`);
+        this.log(`⏳ Waiting ${delay}ms before retry...`);
       }
 
       await new Promise(resolve => setTimeout(resolve, delay));
@@ -102,14 +102,14 @@ export class CursorClient {
             : `"${this.cursorPath}" --print --model ${currentModel} --output-format text < "${tempFile}"`;
 
         if (this.options.debugMode) {
-          console.log('=== CURSOR COMMAND ===');
-          console.log(command);
+          this.log('=== CURSOR COMMAND ===');
+          this.log(command);
           if (attempt > 1) {
-            console.log(`🔄 Trying model: ${currentModel} (attempt ${attempt})`);
+            this.log(`🔄 Trying model: ${currentModel} (attempt ${attempt})`);
           }
-          console.log('=== PROMPT ===');
-          console.log(`${prompt.substring(0, 500)}...`);
-          console.log('=== END DEBUG ===\n');
+          this.log('=== PROMPT ===');
+          this.log(`${prompt.substring(0, 500)}...`);
+          this.log('=== END DEBUG ===\n');
         }
 
         // Use longer timeout for first attempt to account for service warmup
@@ -259,5 +259,19 @@ export class CursorClient {
     }
 
     return undefined;
+  }
+
+  /**
+   * Logging utility that respects silentMode
+   */
+  private log(message: string): void {
+    // Don't log anything in silent mode
+    if (this.options.silentMode) {
+      return;
+    }
+    // Only log in debug mode, or when not in test environment
+    if (this.options.debugMode || process.env.NODE_ENV !== 'test') {
+      console.log(message);
+    }
   }
 }

@@ -398,7 +398,7 @@ REQUIREMENTS:
 - Suggested type: ${suggestedType}${suggestedScope ? `, suggested scope: ${suggestedScope}` : ''}
 - Under 72 characters
 - Imperative mood (add, fix, update)
-- Only when changes are significant: Include 3-5 key bullet points in the commit body describing what was done
+- Only when changes are big: Include 3-5 key bullet points in the commit body describing what was done
 ${userContext ? `- Context: ${userMessage}` : ''}
 ${ticketId ? `- Include: ${ticketId}` : ''}
 
@@ -406,11 +406,12 @@ RESPOND WITH ONLY THE COMMIT MESSAGE BETWEEN @@@ DELIMITERS:
 The final commit message must start and end between "@@@". Everything outside these delimiters will be ignored.
 
 FORMAT:
-@@@type(scope): ticketId - description
-- Bullet point 1 (only for significant changes)
-- Bullet point 2
-- Bullet point 3
-@@@`;
+1. @@@type(scope): ticketId - description@@@
+2. @@@type(scope): ticketId - description
+  - Bullet point 1 (only for significant changes)
+  - Bullet point 2
+  - Bullet point 3
+  @@@`;
   }
 
   /**
