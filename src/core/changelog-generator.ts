@@ -39,6 +39,12 @@ export class ChangelogGenerator {
     try {
       this.log('🔍 Analyzing commits since last CI run...');
 
+      // Check if the last commit was a changelog update - if so, skip processing
+      if (await this.isLastCommitChangelogUpdate()) {
+        this.log('ℹ️  Last commit was a changelog update, skipping to avoid duplicate processing');
+        return null;
+      }
+
       const commits = await this.getCommitsSinceLastCI();
 
       if (commits.length === 0) {
@@ -568,6 +574,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
         .replace(/\n{3,}/g, '\n\n')
         .trim()
     );
+  }
+
+  /**
+   * Check if the last commit was a changelog update
+   * This prevents infinite loops of changelog updates
+   */
+  private async isLastCommitChangelogUpdate(): Promise<boolean> {
+    try {
+      const lastCommitMessage = execSync('git log -1 --pretty=format:"%s"', {
+        encoding: 'utf8',
+      }).trim();
+
+      // Check for common changelog update commit patterns
+      const changelogPatterns = [
+        /chore: update changelog/i,
+        /update changelog/i,
+        /changelog update/i,
+        /automated changelog/i,
+        /📋.*changelog/i,
+        /\[skip ci\].*changelog/i,
+        /changelog.*\[skip ci\]/i,
+      ];
+
+      const isChangelogCommit = changelogPatterns.some(pattern => pattern.test(lastCommitMessage));
+
+      if (isChangelogCommit) {
+        this.log(`Last commit appears to be a changelog update: "${lastCommitMessage}"`);
+      }
+
+      return isChangelogCommit;
+    } catch (error) {
+      this.log(`Warning: Could not check last commit message: ${error}`);
+      return false;
+    }
   }
 
   /**
