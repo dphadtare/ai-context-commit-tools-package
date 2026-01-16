@@ -406,12 +406,12 @@ RESPOND WITH ONLY THE COMMIT MESSAGE BETWEEN @@@ DELIMITERS:
 The final commit message must start and end between "@@@". Everything outside these delimiters will be ignored.
 
 FORMAT:
-1. @@@type(scope): ticketId - description@@@
-2. @@@type(scope): ticketId - description
+1. @@@type(scope): ticketId - description
   - Bullet point 1 (only for significant changes)
   - Bullet point 2
   - Bullet point 3
-  @@@`;
+  @@@
+2. @@@type(scope): ticketId - description@@@`;
   }
 
   /**

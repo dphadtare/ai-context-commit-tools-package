@@ -140,7 +140,7 @@ export class CursorClient {
                 errorMessage += `\n\nTried model: ${currentModel}`;
                 errorMessage += '\nAvailable models: auto, sonnet-4, gpt-5, opus-4.1, grok';
                 errorMessage += '\nTip: Use --model auto for automatic model selection';
-                
+
                 // If this is not the last attempt, mention retries
                 const maxRetriesConfig = this.options.maxRetries || 2;
                 if (attempt < maxRetriesConfig + 1) {
@@ -196,17 +196,17 @@ export class CursorClient {
   private getModelForAttempt(attempt: number, models: string[]): string {
     // Use the user's preferred model first, then fallback through the list
     const preferredModel = this.options.model || 'sonnet-4';
-    
+
     if (attempt === 1) {
       return preferredModel;
     }
-    
+
     // For retry attempts, use models in order, skipping the preferred model
     const fallbackModels = models.filter(model => model !== preferredModel);
     if (fallbackModels.length === 0) {
       return 'auto'; // Ultimate fallback
     }
-    
+
     const modelIndex = (attempt - 2) % fallbackModels.length;
     return fallbackModels[modelIndex] || 'auto';
   }
