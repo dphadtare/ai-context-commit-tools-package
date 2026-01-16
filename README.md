@@ -40,8 +40,8 @@ npx ai-dev-tools init --type nestjs
 ### Prerequisites
 
 1. **Cursor CLI**: Install [Cursor](https://cursor.sh) and ensure CLI is available
-2. **Git Repository**: Your project must be a git repository
-3. **Node.js 16+**: Required for the package to run
+2. **Git Repository**: Your project must be a git repository.
+3. **Node.js 16+**: Required for the package to run.
 
 ## 📖 Usage
 

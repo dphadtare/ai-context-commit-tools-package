@@ -546,35 +546,141 @@ FORMAT:
       return `${suggestedType}${suggestedScope ? `(${suggestedScope})` : ''}: ${userMessage}`;
     }
 
-    // Generate a more specific fallback based on the files changed
-    const { categories } = analysis;
-    let description = 'update implementation';
-
-    if (categories.docs.length > 0 && this.isOnlyCategory(categories, 'docs')) {
-      description = 'update documentation';
-    } else if (categories.config.length > 0 && this.isOnlyCategory(categories, 'config')) {
-      description = 'update configuration files';
-    } else if (categories.tests.length > 0 && this.isOnlyCategory(categories, 'tests')) {
-      description = 'update tests';
-    } else if (categories.database.length > 0) {
-      description = 'update database schema';
-    } else if (analysis.files.length === 1) {
-      const fileName =
-        analysis.files[0]
-          ?.split('/')
-          .pop()
-          ?.replace(/\.(ts|js|tsx|jsx)$/, '') || 'file';
-      description = `update ${fileName}`;
-    } else if (categories.controllers.length > 0) {
-      description = 'update controllers';
-    } else if (categories.services.length > 0) {
-      description = 'update services';
-    }
+    const description = this.generateSmartDescription(analysis);
 
     return `${suggestedType}${suggestedScope ? `(${suggestedScope})` : ''}: ${description}
 
 ⚠️  AI generation failed - please edit this commit message to be more specific
 Modified ${analysis.fileCount} file${analysis.fileCount > 1 ? 's' : ''}: ${analysis.files.slice(0, 3).join(', ')}${analysis.files.length > 3 ? '...' : ''}`;
+  }
+
+  /**
+   * Generate a smart description based on file analysis
+   */
+  private generateSmartDescription(analysis: CommitAnalysis): string {
+    const { categories, files, diff } = analysis;
+
+    // Single file changes get very specific descriptions
+    if (files.length === 1) {
+      const file = files[0];
+      if (!file) return 'update implementation';
+
+      const fileName =
+        file
+          .split('/')
+          .pop()
+          ?.replace(/\.(ts|js|tsx|jsx|dto|spec|test)$/, '') || 'file';
+
+      // Check if it's a DTO file
+      if (file.includes('.dto.')) {
+        return `update ${fileName} DTO structure`;
+      }
+
+      // Check if it's a test file
+      if (file.includes('.spec.') || file.includes('.test.')) {
+        return `update ${fileName} tests`;
+      }
+
+      // Check for specific patterns in the diff
+      if (diff.includes('export interface') || diff.includes('interface ')) {
+        return `update ${fileName} interface`;
+      }
+
+      if (diff.includes('export class') || diff.includes('class ')) {
+        return `update ${fileName} class implementation`;
+      }
+
+      return `update ${fileName} implementation`;
+    }
+
+    // Multiple files - be more specific about what's being updated
+    if (categories.docs.length > 0 && this.isOnlyCategory(categories, 'docs')) {
+      return `update project documentation`;
+    }
+
+    if (categories.tests.length > 0 && this.isOnlyCategory(categories, 'tests')) {
+      const testCount = categories.tests.length;
+      return `update ${testCount} test file${testCount > 1 ? 's' : ''}`;
+    }
+
+    if (categories.config.length > 0 && this.isOnlyCategory(categories, 'config')) {
+      return `update configuration and build files`;
+    }
+
+    // Mixed file types - describe the predominant change
+    if (categories.controllers.length > 0 && categories.services.length > 0) {
+      return `update API controllers and services`;
+    }
+
+    if (categories.controllers.length > 0 && files.some(f => f.includes('.dto.'))) {
+      return `update API controllers and DTOs`;
+    }
+
+    if (categories.controllers.length > 0) {
+      const controllerCount = categories.controllers.length;
+      return `update ${controllerCount} API controller${controllerCount > 1 ? 's' : ''}`;
+    }
+
+    if (categories.services.length > 0) {
+      const serviceCount = categories.services.length;
+      return `update ${serviceCount} service${serviceCount > 1 ? 's' : ''}`;
+    }
+
+    if (categories.components.length > 0) {
+      const componentCount = categories.components.length;
+      return `update ${componentCount} component${componentCount > 1 ? 's' : ''}`;
+    }
+
+    if (categories.database.length > 0) {
+      return `update database schema and migrations`;
+    }
+
+    // DTO-specific handling
+    const dtoFiles = files.filter(f => f.includes('.dto.'));
+    if (dtoFiles.length > 0) {
+      return `update ${dtoFiles.length} DTO${dtoFiles.length > 1 ? 's' : ''} and related files`;
+    }
+
+    // Fallback for mixed changes
+    const primaryCategory = this.getPrimaryCategory(categories);
+    if (primaryCategory) {
+      return `update ${primaryCategory} files and dependencies`;
+    }
+
+    return `update ${files.length} files across multiple modules`;
+  }
+
+  /**
+   * Get the primary category based on file count
+   */
+  private getPrimaryCategory(categories: FileCategories): string | null {
+    const categoryEntries = Object.entries(categories).filter(([_, files]) => files.length > 0);
+
+    if (categoryEntries.length === 0) return null;
+
+    // Sort by count descending
+    categoryEntries.sort(([, a], [, b]) => b.length - a.length);
+
+    const primaryCategoryEntry = categoryEntries[0];
+    if (!primaryCategoryEntry) return null;
+
+    const [primaryCategory] = primaryCategoryEntry;
+
+    // Return more readable category names
+    const readableNames: { [key: string]: string } = {
+      controllers: 'API controller',
+      services: 'service',
+      components: 'component',
+      modules: 'module',
+      tests: 'test',
+      config: 'configuration',
+      docs: 'documentation',
+      database: 'database',
+      styles: 'styling',
+      other: 'implementation',
+    };
+
+    return readableNames[primaryCategory] || primaryCategory;
   }
 
   /**
